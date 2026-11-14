@@ -63,11 +63,45 @@ function Header({ settings, cartCount }) {
       </nav>
       <Link className="cart-link" to="/cart"><ShoppingBag size={19}/><span>Bag ({cartCount})</span></Link>
     </div>
-    {cartCount > 0 && <Link className="mobile-cart-bar" to="/cart" aria-label={`Open shopping bag with ${cartCount} items`}>
+    <Link className={`mobile-cart-bar${cartCount === 0 ? " is-empty" : ""}`} to="/cart" aria-label={`Open shopping bag with ${cartCount} items`}>
       <span className="mobile-cart-left"><ShoppingBag size={19}/><span>View bag <small>{cartCount} {cartCount === 1 ? "item" : "items"}</small></span></span>
       <span className="mobile-cart-action">View bag <ArrowRight size={16}/></span>
-    </Link>}
+    </Link>
   </header>;
+}
+
+function animateProductToCart(product, sourceElement) {
+  if (!sourceElement || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const source = sourceElement.closest(".product-image") || sourceElement;
+  const sourceRect = source.getBoundingClientRect();
+  const target = document.querySelector(".mobile-cart-bar") || document.querySelector(".cart-link");
+  if (!target) return;
+  const targetRect = target.getBoundingClientRect();
+
+  const flyer = document.createElement("div");
+  flyer.className = "cart-flight";
+  flyer.style.left = `${sourceRect.left + sourceRect.width / 2 - 24}px`;
+  flyer.style.top = `${sourceRect.top + sourceRect.height / 2 - 24}px`;
+  flyer.style.setProperty("--fly-x", `${targetRect.left + targetRect.width / 2 - (sourceRect.left + sourceRect.width / 2)}px`);
+  flyer.style.setProperty("--fly-y", `${targetRect.top + targetRect.height / 2 - (sourceRect.top + sourceRect.height / 2)}px`);
+
+  const image = source.querySelector("img");
+  if (image?.src) {
+    const preview = document.createElement("img");
+    preview.src = image.src;
+    preview.alt = "";
+    flyer.appendChild(preview);
+  } else {
+    flyer.textContent = "K";
+  }
+  document.body.appendChild(flyer);
+  flyer.addEventListener("animationend", () => flyer.remove(), { once: true });
+
+  target.classList.remove("cart-target-pulse");
+  void target.offsetWidth;
+  target.classList.add("cart-target-pulse");
+  window.setTimeout(() => target.classList.remove("cart-target-pulse"), 650);
 }
 
 function ProductCard({ product, add, currency }) {
@@ -77,7 +111,7 @@ function ProductCard({ product, add, currency }) {
     <div className="product-image">
       {src ? <img src={src} alt={product.name}/> : <div className="image-placeholder"><ShoppingBag size={30}/><span>KEEPA</span></div>}
       {product.sale_price && <span className="sale-tag">SPECIAL PRICE</span>}
-      <button className="quick-add" onClick={() => { add(product); setAdded(true); setTimeout(() => setAdded(false), 900); }}>
+      <button className="quick-add" onClick={(e) => { animateProductToCart(product, e.currentTarget); add(product); setAdded(true); setTimeout(() => setAdded(false), 900); }}>
         {added ? <><Check size={15}/> Added</> : <><Plus size={15}/> Add to bag</>}
       </button>
     </div>
@@ -358,7 +392,7 @@ function Admin({ settings, refreshStore }) {
       {notice && <div className="notice">{notice}<button onClick={() => setNotice("")}><X size={15}/></button></div>}
       {tab === "overview" && <><div className="stats-grid"><Stat label="Total orders" value={orders.length}/><Stat label="Confirmed revenue" value={money(revenue, storeSettings.currency)}/><Stat label="Active products" value={products.filter(p => p.is_active).length}/><Stat label="Open orders" value={pending}/></div><section className="admin-panel"><div className="panel-head"><h2>Recent orders</h2><button className="text-link" onClick={() => setTab("orders")}>View all <ArrowRight size={14}/></button></div><OrderTable orders={orders.slice(0, 6)} updateOrder={updateOrder}/></section><section className="admin-panel"><h2>Stock watch</h2><div className="simple-list">{products.filter(p => Number(p.stock) <= 5).slice(0, 8).map(p => <div key={p.id}><span>{p.name}</span><strong className="low-stock">{p.stock} left</strong></div>)}{products.every(p => Number(p.stock) > 5) && <p className="muted">No low-stock products.</p>}</div></section></>}
       {tab === "products" && <section className="admin-panel"><div className="panel-head"><h2>{editing?.id ? "Edit product" : "Add product"}</h2><button className="button button-gold" onClick={() => setEditing({})}><Plus size={16}/> Add product</button></div>
-        {editing !== null && <form className="admin-form" onSubmit={saveProduct}><div className="form-grid"><label>Product name<input name="name" required defaultValue={editing.name || ""}/></label><label>Category<input name="category" required list="category-options" defaultValue={editing.category || ""}/><datalist id="category-options">{categories.map(c => <option key={c.id} value={c.name}/>)}</datalist></label><label>Price (₹)<input name="price" type="number" min="0" step="0.01" required defaultValue={editing.price || ""}/></label><label>Sale price (optional)<input name="sale_price" type="number" min="0" step="0.01" defaultValue={editing.sale_price || ""}/></label><label>Stock quantity<input name="stock" type="number" min="0" required defaultValue={editing.stock ?? 0}/></label><label>Product image<input name="image" type="file" accept="image/png,image/jpeg,image/webp"/></label><label className="span-2">Description<textarea name="description" defaultValue={editing.description || ""}/></label><label className="check-label"><input name="is_active" type="checkbox" defaultChecked={editing.is_active ?? true}/> Visible in store</label></div><div className="form-actions"><button className="button button-gold" disabled={busy}>{busy ? "Saving…" : "Save product"}</button><button type="button" className="button button-outline" onClick={() => setEditing(null)}>Cancel</button></div></form>}
+        {editing !== null && <form className="admin-form" onSubmit={saveProduct}><div className="form-grid"><label>Product name<input name="name" required defaultValue={editing.name || ""}/></label><label>Category<select name="category" required defaultValue={editing.category || ""}><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></label><label>Price (₹)<input name="price" type="number" min="0" step="0.01" required defaultValue={editing.price || ""}/></label><label>Sale price (optional)<input name="sale_price" type="number" min="0" step="0.01" defaultValue={editing.sale_price || ""}/></label><label>Stock quantity<input name="stock" type="number" min="0" required defaultValue={editing.stock ?? 0}/></label><label>Product image<input name="image" type="file" accept="image/png,image/jpeg,image/webp"/></label><label className="span-2">Description<textarea name="description" defaultValue={editing.description || ""}/></label><label className="check-label"><input name="is_active" type="checkbox" defaultChecked={editing.is_active ?? true}/> Visible in store</label></div><div className="form-actions"><button className="button button-gold" disabled={busy}>{busy ? "Saving…" : "Save product"}</button><button type="button" className="button button-outline" onClick={() => setEditing(null)}>Cancel</button></div></form>}
         <div className="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map(p => <tr key={p.id}><td>{p.name}</td><td>{p.category}</td><td>{money(p.sale_price || p.price, storeSettings.currency)}</td><td>{p.stock}</td><td><span className="status-pill">{p.is_active ? "Active" : "Hidden"}</span></td><td><button className="icon-btn" onClick={() => setEditing(p)}><Pencil size={16}/></button><button className="icon-btn danger" onClick={() => deleteProduct(p.id)}><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
       </section>}
       {tab === "orders" && <section className="admin-panel"><h2>All orders</h2><OrderTable orders={orders} updateOrder={updateOrder}/></section>}
