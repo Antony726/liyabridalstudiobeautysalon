@@ -63,6 +63,10 @@ function Header({ settings, cartCount }) {
       </nav>
       <Link className="cart-link" to="/cart"><ShoppingBag size={19}/><span>Bag ({cartCount})</span></Link>
     </div>
+    {cartCount > 0 && <Link className="mobile-cart-bar" to="/cart" aria-label={`Open shopping bag with ${cartCount} items`}>
+      <span className="mobile-cart-left"><ShoppingBag size={19}/><span>View bag <small>{cartCount} {cartCount === 1 ? "item" : "items"}</small></span></span>
+      <span className="mobile-cart-action">View bag <ArrowRight size={16}/></span>
+    </Link>}
   </header>;
 }
 
@@ -327,8 +331,21 @@ function Admin({ settings, refreshStore }) {
   async function addCategory(e) {
     e.preventDefault(); const name = new FormData(e.currentTarget).get("name")?.trim();
     if (!name) return;
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) { setNotice("That category already exists."); return; }
     const { error } = await requireSupabase().from("categories").insert({ name });
-    setNotice(error ? error.message : "Category added."); if (!error) { e.currentTarget.reset(); loadAdmin(); refreshStore(); }
+    setNotice(error ? error.message : "Category added."); if (!error) { e.currentTarget.reset(); await loadAdmin(); refreshStore(); }
+  }
+
+  async function deleteCategory(category) {
+    const assignedProducts = products.filter(p => (p.category || "").trim().toLowerCase() === category.name.trim().toLowerCase());
+    if (assignedProducts.length) {
+      setNotice(`Cannot delete “${category.name}” yet. ${assignedProducts.length} product(s) still use it. Reassign those products first.`);
+      return;
+    }
+    if (!window.confirm(`Delete the category “${category.name}”? This cannot be undone.`)) return;
+    const { error } = await requireSupabase().from("categories").delete().eq("id", category.id);
+    setNotice(error ? error.message : `Category “${category.name}” deleted.`);
+    if (!error) { await loadAdmin(); refreshStore(); }
   }
 
   if (!user) return <AdminLogin onLogin={u => { setUser(u); loadAdmin(); }}/>;
@@ -345,7 +362,7 @@ function Admin({ settings, refreshStore }) {
         <div className="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map(p => <tr key={p.id}><td>{p.name}</td><td>{p.category}</td><td>{money(p.sale_price || p.price, storeSettings.currency)}</td><td>{p.stock}</td><td><span className="status-pill">{p.is_active ? "Active" : "Hidden"}</span></td><td><button className="icon-btn" onClick={() => setEditing(p)}><Pencil size={16}/></button><button className="icon-btn danger" onClick={() => deleteProduct(p.id)}><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
       </section>}
       {tab === "orders" && <section className="admin-panel"><h2>All orders</h2><OrderTable orders={orders} updateOrder={updateOrder}/></section>}
-      {tab === "categories" && <section className="admin-panel"><h2>Product categories</h2><form className="inline-form" onSubmit={addCategory}><input name="name" placeholder="New category name" required/><button className="button button-gold"><Plus size={15}/> Add category</button></form><div className="category-admin">{categories.map(c => <span key={c.id}>{c.name}</span>)}</div></section>}
+      {tab === "categories" && <section className="admin-panel"><h2>Product categories</h2><form className="inline-form" onSubmit={addCategory}><input name="name" placeholder="New category name" required/><button className="button button-gold"><Plus size={15}/> Add category</button></form><div className="category-admin">{categories.map(c => <div className="category-admin-item" key={c.id}><span>{c.name}</span><button type="button" className="icon-btn danger" onClick={() => deleteCategory(c)} aria-label={`Delete ${c.name}`} title="Delete category"><Trash2 size={15}/></button></div>)}</div></section>}
       {tab === "settings" && <section className="admin-panel"><h2>Store identity & contact</h2><form className="admin-form" onSubmit={saveSettings}><div className="form-grid"><label>Store name<input value={storeSettings.store_name || ""} onChange={e => setStoreSettings({ ...storeSettings, store_name: e.target.value })} required/></label><label>Tagline<input value={storeSettings.tagline || ""} onChange={e => setStoreSettings({ ...storeSettings, tagline: e.target.value })}/></label><label>WhatsApp number<input value={storeSettings.whatsapp_number || ""} onChange={e => setStoreSettings({ ...storeSettings, whatsapp_number: e.target.value })} placeholder="91XXXXXXXXXX"/></label><label>Contact email<input type="email" value={storeSettings.contact_email || ""} onChange={e => setStoreSettings({ ...storeSettings, contact_email: e.target.value })}/></label><label>Instagram URL<input value={storeSettings.instagram_url || ""} onChange={e => setStoreSettings({ ...storeSettings, instagram_url: e.target.value })}/></label><label>Announcement bar<input value={storeSettings.announcement || ""} onChange={e => setStoreSettings({ ...storeSettings, announcement: e.target.value })}/></label><label>Currency<select value={storeSettings.currency || "INR"} onChange={e => setStoreSettings({ ...storeSettings, currency: e.target.value })}><option value="INR">INR – Indian Rupee</option></select></label></div><button className="button button-gold" disabled={busy}>{busy ? "Saving…" : "Save store settings"}</button></form></section>}
     </main>
   </div>;
